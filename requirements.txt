@@ -1,0 +1,10 @@
+streamlit
+pdfplumber
+pandas
+openpyxl
+google-generativeai
+langchain
+langchain-community
+sentence-transformers
+python-dotenv
+faiss-cpu
