@@ -9,10 +9,12 @@ import google.generativeai as genai
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
+import matplotlib.pyplot as plt
+import re
 
 # 1️⃣ GYANM - AI config
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))  # uses your env
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))  # uses your .env
 gyanm_ai = genai.GenerativeModel("gemini-2.0-flash")  # rebranded in UI as GYANM-AI
 
 # 2️⃣ Streamlit page
@@ -122,14 +124,20 @@ if uploaded_file:
         st.info("No text lines found in the PDF.")
 
     # 7️⃣ Build semantic index
+    # 7️⃣ Build semantic index
     st.info("🔗 Building semantic index for smart text search...")
     text_splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=100)
     split_docs = text_splitter.create_documents(text_chunks)
-
+    
     embed_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    db_text = FAISS.from_documents(split_docs, embed_model)
+    
+    if split_docs:  # safe check
+        db_text = FAISS.from_documents(split_docs, embed_model)
+    else:
+        db_text = None
+        st.warning("⚠️ No text available to build semantic index.")
 
-    # semantic index on table
+
     if not df_table.empty:
         table_text_rows = [
             " | ".join(str(v) for v in row)
@@ -151,11 +159,17 @@ if uploaded_file:
                 df_table.apply(lambda row: row.astype(str).str.contains(unified_query, case=False).any(), axis=1)
             ]
 
-        semantic_matches = db_text.similarity_search(unified_query, k=5)
+        if db_text:
+             semantic_matches = db_text.similarity_search(unified_query, k=5)
+        else:
+            semantic_matches = []
 
         semantic_table_matches = []
         if db_table:
-            semantic_table_matches = db_table.similarity_search(unified_query, k=5)
+           semantic_table_matches = db_table.similarity_search(unified_query, k=5)
+        else:
+            semantic_table_matches = []
+
 
         st.markdown("### 🟦 Structured Table Matches")
         if not structured_matches.empty:
@@ -195,7 +209,7 @@ if uploaded_file:
             else:
                 st.info("No semantic table matches found.")
 
-        # GYANM-AI explanation
+        # explanation
         table_context = "\n".join(doc.page_content for doc in semantic_table_matches) if semantic_table_matches else ""
         prompt = (
             f"Given this extracted data:\n\n{table_context}\n\n"
@@ -208,56 +222,36 @@ if uploaded_file:
         except Exception as e:
             st.error(f"❌ GYANM - AI error: {e}")
 
-    # 9️⃣ Dynamic AI Table Generation
+    # 9️⃣ Dynamic AI Table Generator
     st.subheader("📊 Dynamic Table Generator with GYANM - AI")
-
-    dynamic_query = st.text_input("Type what table you want to extract (e.g., 'list all Mechanical Engineering students'):")
+    dynamic_query = st.text_input("Type what table you want to extract:")
 
     if dynamic_query:
         try:
             combined_content = "\n".join(text_chunks)
             if not df_table.empty:
-                combined_content += "\n\n"
-                combined_content += df_table.to_csv(index=False)
-
+                combined_content += "\n\n" + df_table.to_csv(index=False)
             dynamic_prompt = f"""
-            From the following PDF content, please form a structured table in columns based on the user request:
-
-            USER REQUEST:
-            {dynamic_query}
-
-            PDF CONTENT:
-            {combined_content[:15000]}
-
-            Return the table in markdown format.
+            From the PDF content below, form a structured table in markdown as per the user request:
+            USER REQUEST: {dynamic_query}
+            PDF CONTENT: {combined_content[:15000]}
             """
-
             gyanm_ai_response = gyanm_ai.generate_content(dynamic_prompt)
             gyanm_table_md = gyanm_ai_response.text
-
             st.markdown("### 📋 Generated Table by GYANM - AI")
             st.markdown(gyanm_table_md, unsafe_allow_html=True)
 
-            # Try to parse back to DataFrame
-            import pandas as pd
-            from io import StringIO
-
-            table_lines = [line for line in gyanm_table_md.splitlines() if "|" in line]
-            csv_like = "\n".join(table_lines).replace("|", ",")
-            df_gyanm = pd.read_csv(StringIO(csv_like), skipinitialspace=True)
-
+            # SAFELY parse table using read_html
+            dfs = pd.read_html(f"<table>{gyanm_table_md}</table>") if "<table>" not in gyanm_table_md else pd.read_html(gyanm_table_md)
+            df_gyanm = dfs[0]
             excel_buf4 = io.BytesIO()
             df_gyanm.to_excel(excel_buf4, index=False, engine="openpyxl")
-            st.download_button(
-                "⬇️ Download GYANM-AI Generated Table as Excel",
-                data=excel_buf4.getvalue(),
-                file_name="gyanm_ai_generated_table.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
+            st.download_button("⬇️ Download GYANM-AI Generated Table as Excel",
+                               data=excel_buf4.getvalue(),
+                               file_name="gyanm_ai_generated_table.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         except Exception as e:
             st.error(f"❌ GYANM - AI dynamic table error: {e}")
-
     # 🔟 Summary
     if st.button("🧠 Generate AI Summary of Entire Text"):
         try:
@@ -288,6 +282,66 @@ if uploaded_file:
             st.success(insights_response.text)
         except Exception as e:
             st.error(f"❌ GYANM - AI insights error: {e}")
+
+    # 1️⃣1️⃣ General Chat with table/chart ability
+    st.subheader("💬 GYANM - AI General Chat with Table/Chart Builder")
+    user_question = st.text_input("Ask anything from the PDF, even chart/table requests:")
+
+    if user_question:
+        try:
+            combined_content = "\n".join(text_chunks)
+            if not df_table.empty:
+                combined_content += "\n\n" + df_table.to_csv(index=False)
+
+            chat_prompt = f"""
+            You are GYANM-AI, an intelligent assistant.
+
+            The user question is: "{user_question}"
+
+            Please answer clearly, and if appropriate, also produce:
+            - a markdown table if it fits
+            - or a chart data description (example: "labels: X, values: Y")
+            based on the following PDF contents:
+
+            {combined_content[:15000]}
+
+            Return any tables in markdown, charts as text data description, and a textual explanation.
+            """
+
+            chat_response = gyanm_ai.generate_content(chat_prompt)
+            answer = chat_response.text
+            st.subheader("💬 GYANM - AI Answer")
+            st.markdown(answer, unsafe_allow_html=True)
+
+            # parse possible table
+            table_lines = [line for line in answer.splitlines() if "|" in line]
+            if table_lines:
+                csv_like = "\n".join(table_lines).replace("|", ",")
+                df_ai = pd.read_csv(io.StringIO(csv_like), skipinitialspace=True)
+
+                st.dataframe(df_ai)
+                excel_buf5 = io.BytesIO()
+                df_ai.to_excel(excel_buf5, index=False, engine="openpyxl")
+                st.download_button(
+                    "⬇️ Download GYANM-AI General Chat Table as Excel",
+                    data=excel_buf5.getvalue(),
+                    file_name="gyanm_ai_general_chat_table.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+
+            # parse chart instructions
+            if "labels:" in answer and "values:" in answer:
+                labels_match = re.search(r"labels:\s*(.*)", answer)
+                values_match = re.search(r"values:\s*(.*)", answer)
+                if labels_match and values_match:
+                    labels = [x.strip() for x in labels_match.group(1).split(",")]
+                    values = [float(x.strip()) for x in values_match.group(1).split(",")]
+                    fig, ax = plt.subplots()
+                    ax.pie(values, labels=labels, autopct="%1.1f%%")
+                    st.pyplot(fig)
+
+        except Exception as e:
+            st.error(f"❌ GYANM - AI chat error: {e}")
 
     st.markdown("---")
     st.markdown("🛠 **Full Credit: Developed by Suraj Kumar Pandey (Founder, Gyanm AI Platform)**")
