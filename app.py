@@ -344,7 +344,7 @@ if uploaded_file:
             st.error(f"❌ GYANM - AI chat error: {e}")
 
     st.markdown("---")
-    st.markdown("🛠 **Full Credit: Developed by Suraj Kumar Pandey (Founder, Gyanm AI Platform)**")
+    st.markdown("🛠 ** Developed by Suraj Kumar Pandey (Founder, Gyanm AI Platform)**")
 
 else:
     st.info("Please upload a PDF file to get started.")
