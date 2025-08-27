@@ -15,7 +15,7 @@ import re
 # 1️⃣ GYANM - AI config
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))  # uses your .env
-gyanm_ai = genai.GenerativeModel("gemini-2.0-flash")  # rebranded in UI as GYANM-AI
+gyanm_ai = genai.GenerativeModel("gemini-2.5-flash")  # rebranded in UI as GYANM-AI
 
 # 2️⃣ Streamlit page
 st.set_page_config(page_title="AI PDF to Excel & Summarizing by Suraj", layout="wide")
@@ -348,3 +348,4 @@ if uploaded_file:
 
 else:
     st.info("Please upload a PDF file to get started.")
+
