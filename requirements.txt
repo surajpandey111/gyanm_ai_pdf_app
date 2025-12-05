@@ -10,7 +10,9 @@ google-generativeai==0.8.3
 langchain==0.3.1
 langchain-community==0.3.1
 langchain-text-splitters==0.3.1
+# NEW: For HuggingFaceEmbeddings (fixes deprecation + meta tensor error)
+langchain-huggingface==0.1.0
 # Embeddings
 sentence-transformers==3.1.1
-# FAISS — FIXED: Latest version with Python 3.13+ ABI3 compatibility
+# FAISS
 faiss-cpu==1.13.1
