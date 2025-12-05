@@ -6,7 +6,7 @@ import tempfile
 import io
 from dotenv import load_dotenv
 import google.generativeai as genai
-from langchain.text_splitter import CharacterTextSplitter
+from langchain.text_splitters import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 import matplotlib.pyplot as plt
@@ -348,4 +348,5 @@ if uploaded_file:
 
 else:
     st.info("Please upload a PDF file to get started.")
+
 
