@@ -4,8 +4,13 @@ pandas==2.2.2
 openpyxl==3.1.2
 matplotlib==3.7.2
 python-dotenv==1.0.0
-google-generative-ai==0.1.0
+
+# Google Gemini SDK (CORRECT NAME)
+google-generativeai>=0.5.4
+
+# Language + embeddings
 sentence-transformers==2.2.2
-# Optional offline: langchain and community packages are not required for basic app functionality on Streamlit Cloud
+
+# LangChain (optional; safe version)
 langchain==0.2.3
 langchain-community==0.2.3
