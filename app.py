@@ -1,4 +1,8 @@
-# app.py (AI_HUB - ready to paste) --------------------------------------------
+# =====================================================================
+#  AI_HUB — Research PDF Intelligence System
+#  Final Streamlit App (Stable for Streamlit Cloud)
+# =====================================================================
+
 import streamlit as st
 import os
 import pdfplumber
@@ -9,502 +13,288 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 import matplotlib.pyplot as plt
 import re
+import numpy as np
 
-# --- Robust LangChain / FAISS imports (safe for Streamlit Cloud) -------------
+# =====================================================================
+# 1. SAFE LANGUAGE & EMBEDDINGS IMPORTS (NO CRASH IF MISSING)
+# =====================================================================
+
 has_langchain = False
 has_langchain_community = False
+
 CharacterTextSplitter = None
 FAISS = None
 HuggingFaceEmbeddings = None
 
 try:
-    # try newest path first
-    from langchain.text_splitters import CharacterTextSplitter  # new path
+    # Newer LangChain path
+    from langchain.text_splitters import CharacterTextSplitter
     has_langchain = True
+
     try:
         from langchain_community.vectorstores import FAISS
         from langchain_community.embeddings import HuggingFaceEmbeddings
         has_langchain_community = True
-    except Exception:
+    except:
         FAISS = None
         HuggingFaceEmbeddings = None
-        has_langchain_community = False
-except Exception:
-    # fallback to older path
-    try:
-        from langchain.text_splitter import CharacterTextSplitter  # older path
-        has_langchain = True
-        try:
-            from langchain_community.vectorstores import FAISS
-            from langchain_community.embeddings import HuggingFaceEmbeddings
-            has_langchain_community = True
-        except Exception:
-            FAISS = None
-            HuggingFaceEmbeddings = None
-            has_langchain_community = False
-    except Exception:
-        CharacterTextSplitter = None
-        FAISS = None
-        HuggingFaceEmbeddings = None
-        has_langchain = False
         has_langchain_community = False
 
-# Simple fallback splitter (mimics CharacterTextSplitter interface)
+except:
+    # Older fallback
+    try:
+        from langchain.text_splitter import CharacterTextSplitter
+        has_langchain = True
+    except:
+        CharacterTextSplitter = None
+        has_langchain = False
+
+
+# =====================================================================
+# 2. FALLBACK TEXT SPLITTER (ALWAYS WORKS)
+# =====================================================================
+
 class SimpleCharacterSplitter:
     def __init__(self, chunk_size=500, chunk_overlap=100):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
 
-    def split_text(self, text):
-        if not text:
-            return []
-        chunks = []
-        start = 0
-        L = len(text)
-        cs = self.chunk_size
-        co = self.chunk_overlap
-        while start < L:
-            end = min(start + cs, L)
-            chunks.append(text[start:end])
-            start = end - co if end - co > start else end
-        return chunks
-
     def create_documents(self, texts):
-        # return objects with .page_content to mimic LangChain docs
         class Doc:
             def __init__(self, content): self.page_content = content
-        docs = []
+
         if isinstance(texts, str):
             texts = [texts]
-        for t in texts:
-            for c in self.split_text(t):
-                docs.append(Doc(c))
+
+        docs = []
+        for text in texts:
+            start = 0
+            while start < len(text):
+                end = min(start + self.chunk_size, len(text))
+                docs.append(Doc(text[start:end]))
+                start = end - self.chunk_overlap
         return docs
 
-# If FAISS not available, provide an in-memory vector fallback using sentence-transformers
+
+# =====================================================================
+# 3. SENTENCE TRANSFORMERS FALLBACK (NO FAISS NEEDED)
+# =====================================================================
+
 use_sentence_transformers_fallback = False
 sentence_model = None
-import numpy as np
+
 try:
-    if FAISS is None:
-        # Try to import sentence-transformers encoder for in-memory embedding+cosine similarity
-        from sentence_transformers import SentenceTransformer
-        sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
-        use_sentence_transformers_fallback = True
-except Exception:
+    from sentence_transformers import SentenceTransformer
+    sentence_model = SentenceTransformer("all-MiniLM-L6-v2")
+    use_sentence_transformers_fallback = True
+except:
     use_sentence_transformers_fallback = False
-    sentence_model = None
 
-# ---------------- AI_HUB (RESEARCH PDF) config --------------------------------
+
+# =====================================================================
+# 4. AI_HUB (Gemini) CONFIG
+# =====================================================================
+
 load_dotenv()
+
+ai_hub = None
 try:
-    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))  # uses your .env
+    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
     ai_hub = genai.GenerativeModel("gemini-2.5-flash")
-except Exception as e:
-    # if Gemini not configured, we keep a placeholder to avoid crash
-    ai_hub = None
-    st.warning("Warning: Google Generative AI not configured or failed to initialize. AI_HUB features will be disabled.")
+except:
+    st.warning("⚠️ AI_HUB (Gemini) is not configured. AI features disabled.")
 
-# ---------------- Streamlit page ------------------------------------------------
-st.set_page_config(page_title="AI_HUB — Research PDF to Excel & Insights", layout="wide")
-st.title("🤖 AI_HUB — Research PDF to Excel, Smart Search & Insights")
-st.caption("🛠 Developed with ❤️ by **Suraj Kumar Pandey (Founder, AI_HUB Research Platform)**")
 
-uploaded_file = st.file_uploader("📄 Upload your PDF file", type="pdf")
+# =====================================================================
+# 5. STREAMLIT UI HEADER
+# =====================================================================
+
+st.set_page_config(page_title="AI_HUB — Research PDF Intelligence", layout="wide")
+st.title("🤖 AI_HUB — Research PDF Intelligence System")
+st.caption("Built by **Suraj Kumar Pandey** — Research Automation & AI Extraction Suite")
+
+uploaded_file = st.file_uploader("📄 Upload Your Research/Technical PDF", type="pdf")
+
+# =====================================================================
+# 6. PDF EXTRACTION ENGINE
+# =====================================================================
 
 if uploaded_file:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-        tmp_file.write(uploaded_file.read())
-        pdf_path = tmp_file.name
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp.write(uploaded_file.read())
+        pdf_path = tmp.name
 
-    st.success("✅ PDF uploaded and ready to process!")
+    st.success("✅ PDF Uploaded Successfully!")
 
-    # 3️⃣ Extract tables + text
-    tables_list = []
-    text_chunks = []
+    tables_list, text_chunks = [], []
 
     with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
-            # Tables
-            page_tables = page.extract_tables()
-            if page_tables:
-                for table in page_tables:
-                    cols = table[0]
-                    # make columns unique
-                    def make_unique(seq):
-                        seen = {}
-                        out = []
-                        for x in seq:
-                            if x not in seen:
-                                seen[x] = 1
-                                out.append(x)
-                            else:
-                                seen[x] += 1
-                                out.append(f"{x}_{seen[x]}")
-                        return out
-
-                    unique_cols = make_unique(cols)
-                    df_tmp = pd.DataFrame(table[1:], columns=unique_cols)
+            # *** Extract tables ***
+            pg_tables = page.extract_tables()
+            if pg_tables:
+                for t in pg_tables:
+                    cols = list(dict.fromkeys(t[0]))
+                    df_tmp = pd.DataFrame(t[1:], columns=cols)
                     df_tmp["source"] = "table"
                     tables_list.append(df_tmp)
 
-            # Text
-            page_text = page.extract_text()
-            if page_text:
-                lines = [line.strip() for line in page_text.split("\n") if line.strip()]
+            # *** Extract text ***
+            text = page.extract_text()
+            if text:
+                lines = [x.strip() for x in text.split("\n") if x.strip()]
                 text_chunks.extend(lines)
 
-    # DataFrames
-    if tables_list:
-        try:
-            df_table = pd.concat(tables_list, ignore_index=True)
-        except Exception as e:
-            st.error(f"⚠️ Error merging tables: {e}")
-            df_table = pd.DataFrame()
-    else:
-        df_table = pd.DataFrame()
+    # Build dataframes
+    df_table = pd.concat(tables_list, ignore_index=True) if tables_list else pd.DataFrame()
+    df_text = pd.DataFrame(text_chunks, columns=["Text"]) if text_chunks else pd.DataFrame()
 
-    df_text = pd.DataFrame(text_chunks, columns=["Text"])
-    df_text["source"] = "text"
 
-    # 4️⃣ Display tables
+    # =====================================================================
+    # 7. DISPLAY TABLES
+    # =====================================================================
+
     st.subheader("📊 Extracted Tables")
-    if not df_table.empty:
+    if df_table.empty:
+        st.info("No structured tables found in this PDF.")
+    else:
         st.dataframe(df_table)
 
-        excel_buf = io.BytesIO()
-        df_table.to_excel(excel_buf, index=False, engine="openpyxl")
-        st.download_button(
-            "⬇️ Download Tables as Excel",
-            data=excel_buf.getvalue(),
-            file_name="tables.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        buf = io.BytesIO()
+        df_table.to_excel(buf, index=False, engine="openpyxl")
+        st.download_button("⬇️ Download Tables (Excel)", buf.getvalue(), "tables.xlsx")
 
-        # 5️⃣ Column-based filter
-        st.subheader("🔍 Filter Structured Data by Any Column")
-        filter_query = st.text_input("Type to search in tables:")
 
-        if filter_query:
-            filtered_df = df_table[
-                df_table.apply(lambda row: row.astype(str).str.contains(filter_query, case=False).any(), axis=1)
-            ]
-            st.dataframe(filtered_df)
-            if filtered_df.empty:
-                st.warning("No matching rows found.")
+    # =====================================================================
+    # 8. DISPLAY TEXT
+    # =====================================================================
+
+    st.subheader("📝 Extracted Text Content")
+    if df_text.empty:
+        st.info("No readable text found in this PDF.")
     else:
-        st.info("No tables found in the PDF.")
+        st.dataframe(df_text, height=300)
+        buf = io.BytesIO()
+        df_text.to_excel(buf, index=False, engine="openpyxl")
+        st.download_button("⬇️ Download Text (Excel)", buf.getvalue(), "text.xlsx")
 
-    # 6️⃣ Display text
-    st.subheader("📝 Extracted Free Text")
-    if not df_text.empty:
-        st.dataframe(df_text)
 
-        excel_buf2 = io.BytesIO()
-        df_text.to_excel(excel_buf2, index=False, engine="openpyxl")
-        st.download_button(
-            "⬇️ Download Text as Excel",
-            data=excel_buf2.getvalue(),
-            file_name="text.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-    else:
-        st.info("No text lines found in the PDF.")
+    # =====================================================================
+    # 9. SEMANTIC INDEX BUILD SYSTEM
+    # =====================================================================
 
-    # 7️⃣ Build semantic index (safe): prefer LangChain/FAISS if available; else use sentence-transformers in-memory
-    st.info("🔗 Building semantic index for smart text search (if available)...")
+    st.info("⚙️ Building AI semantic index...")
 
-    if has_langchain and has_langchain_community and HuggingFaceEmbeddings and FAISS:
+    splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=100) if CharacterTextSplitter else SimpleCharacterSplitter()
+    documents = splitter.create_documents(text_chunks)
+
+    # FAISS Mode
+    if has_langchain and has_langchain_community and FAISS:
         try:
-            text_splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=100)
-            split_docs = text_splitter.create_documents(text_chunks)
-            embed_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-            db_text = FAISS.from_documents(split_docs, embed_model) if split_docs else None
-
-            if not df_table.empty:
-                table_text_rows = [" | ".join(str(v) for v in row) for row in df_table.values.tolist()]
-                table_docs = text_splitter.create_documents(table_text_rows)
-                db_table = FAISS.from_documents(table_docs, embed_model) if table_docs else None
-            else:
-                db_table = None
-        except Exception as e:
-            st.warning(f"FAISS/langchain-community failed to initialize: {e}")
+            embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+            db_text = FAISS.from_documents(documents, embeddings)
+        except:
             db_text = None
-            db_table = None
-    elif has_langchain and CharacterTextSplitter is not None and use_sentence_transformers_fallback and sentence_model:
-        # Use LangChain splitter (if present) but sentence-transformers for embeddings + in-memory similarity
-        try:
-            text_splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=100) if CharacterTextSplitter else SimpleCharacterSplitter(chunk_size=500, chunk_overlap=100)
-            split_docs = text_splitter.create_documents(text_chunks)
-            # compute vector matrix for split_docs using sentence_model
-            doc_texts = [d.page_content for d in split_docs]
-            if doc_texts:
-                doc_embeddings = sentence_model.encode(doc_texts, convert_to_numpy=True)
-            else:
-                doc_embeddings = np.array([]).reshape(0, 384)
-            # store docs and embeddings in-memory
-            db_text = {"docs": split_docs, "embeddings": doc_embeddings}
-            if not df_table.empty:
-                table_text_rows = [" | ".join(str(v) for v in row) for row in df_table.values.tolist()]
-                table_docs = text_splitter.create_documents(table_text_rows)
-                table_texts = [d.page_content for d in table_docs]
-                table_embeddings = sentence_model.encode(table_texts, convert_to_numpy=True) if table_texts else np.array([]).reshape(0,384)
-                db_table = {"docs": table_docs, "embeddings": table_embeddings}
-            else:
-                db_table = None
-        except Exception as e:
-            st.warning(f"Sentence-transformers fallback failed: {e}")
-            db_text = None
-            db_table = None
+    # Sentence-Transformer fallback
+    elif use_sentence_transformers_fallback:
+        doc_texts = [d.page_content for d in documents]
+        embeddings = sentence_model.encode(doc_texts, convert_to_numpy=True)
+        db_text = {"docs": documents, "emb": embeddings}
     else:
-        # no semantic features available; use a simple splitter so rest of app works
-        text_splitter = SimpleCharacterSplitter(chunk_size=500, chunk_overlap=100)
-        split_docs = text_splitter.create_documents(text_chunks)
         db_text = None
-        db_table = None
-        st.warning("Semantic search disabled (LangChain/FAISS or sentence-transformers not available).")
 
-    # 8️⃣ Unified Smart Search
-    st.subheader("🤖 Unified Smart Search (Tables + Semantic)")
-    unified_query = st.text_input("Type your keyword or question:")
 
-    def semantic_search_in_memory(db, query, k=5):
-        # db: {"docs": [Doc], "embeddings": np.array}
-        if not db or "docs" not in db or db["embeddings"].size == 0:
-            return []
-        q_emb = sentence_model.encode([query], convert_to_numpy=True)[0]
-        # cosine similarity
-        emb = db["embeddings"]
-        scores = np.dot(emb, q_emb) / (np.linalg.norm(emb, axis=1) * np.linalg.norm(q_emb) + 1e-10)
-        idxs = np.argsort(-scores)[:k]
-        return [db["docs"][i] for i in idxs]
+    # =====================================================================
+    # 10. SEARCH SYSTEM (Tables + AI Semantic)
+    # =====================================================================
 
-    if unified_query:
-        structured_matches = pd.DataFrame()
-        if not df_table.empty:
-            structured_matches = df_table[
-                df_table.apply(lambda row: row.astype(str).str.contains(unified_query, case=False).any(), axis=1)
-            ]
+    st.subheader("🔍 Unified Search (Keyword + Semantic)")
+    query = st.text_input("Enter your question or keyword:")
 
-        # semantic matches: prefer FAISS/langchain if available, else in-memory
-        if db_text and isinstance(db_text, dict) and "embeddings" in db_text:
-            try:
-                semantic_matches = semantic_search_in_memory(db_text, unified_query, k=5)
-            except Exception:
-                semantic_matches = []
-        elif db_text and hasattr(db_text, "similarity_search"):
-            try:
-                semantic_matches = db_text.similarity_search(unified_query, k=5)
-            except Exception:
-                semantic_matches = []
-        else:
-            semantic_matches = []
-
-        # semantic table matches
-        if db_table and isinstance(db_table, dict) and "embeddings" in db_table:
-            try:
-                semantic_table_matches = semantic_search_in_memory(db_table, unified_query, k=5)
-            except Exception:
-                semantic_table_matches = []
-        elif db_table and hasattr(db_table, "similarity_search"):
-            try:
-                semantic_table_matches = db_table.similarity_search(unified_query, k=5)
-            except Exception:
-                semantic_table_matches = []
-        else:
-            semantic_table_matches = []
-
-        st.markdown("### 🟦 Structured Table Matches")
-        if not structured_matches.empty:
-            st.dataframe(structured_matches)
-        else:
-            st.info("No structured matches found.")
-
-        st.markdown("### 🟨 Semantic Free Text Matches")
-        if semantic_matches:
-            for i, doc in enumerate(semantic_matches, 1):
-                st.write(f"**Result {i}:**\n{doc.page_content}\n")
-        else:
-            st.info("No semantic free text matches found or semantic features disabled.")
-
-        st.markdown("### 🟧 Semantic Table Matches (AI)")
-        semantic_table_rows = []
-        if semantic_table_matches:
-            for doc in semantic_table_matches:
-                for idx, row in enumerate(df_table.values.tolist()):
-                    joined_row = " | ".join(str(v) for v in row)
-                    if joined_row == doc.page_content:
-                        semantic_table_rows.append(df_table.iloc[idx])
-                        break
-
-            if semantic_table_rows:
-                ai_table_df = pd.DataFrame(semantic_table_rows)
-                st.dataframe(ai_table_df)
-
-                excel_buf3 = io.BytesIO()
-                ai_table_df.to_excel(excel_buf3, index=False, engine="openpyxl")
-                st.download_button(
-                    "⬇️ Download AI Matched Table Rows as Excel",
-                    data=excel_buf3.getvalue(),
-                    file_name="ai_table_matches.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-            else:
-                st.info("No semantic table matches found.")
-
-        # explanation using AI_HUB (if configured)
-        table_context = "\n".join(doc.page_content for doc in semantic_table_matches) if semantic_table_matches else ""
-        prompt = (
-            f"Given this extracted data:\n\n{table_context}\n\n"
-            f"and user query:\n{unified_query}\n\n"
-            f"Provide a detailed answer with insights."
+    def semantic_search(db, q, k=5):
+        q_emb = sentence_model.encode([q], convert_to_numpy=True)[0]
+        sims = np.dot(db["emb"], q_emb) / (
+            np.linalg.norm(db["emb"], axis=1) * np.linalg.norm(q_emb) + 1e-10
         )
-        try:
-            if ai_hub:
-                ai_response = ai_hub.generate_content(prompt)
-                st.markdown(f"### 🧠 AI_HUB - Explanation\n{ai_response.text}")
+        top = sims.argsort()[::-1][:k]
+        return [db["docs"][i] for i in top]
+
+    if query:
+        # 1️⃣ Structured filter
+        if not df_table.empty:
+            structured = df_table[df_table.apply(lambda r: r.astype(str).str.contains(query, case=False).any(), axis=1)]
+            st.write("### 🟦 Structured Matches")
+            st.dataframe(structured if not structured.empty else "No matches")
+        else:
+            st.info("No tables available for structured search.")
+
+        # 2️⃣ Semantic text search
+        st.write("### 🟨 Semantic Text Matches")
+
+        if db_text:
+            if isinstance(db_text, dict):
+                results = semantic_search(db_text, query)
             else:
-                st.info("AI_HUB not configured; can't produce AI explanation.")
-        except Exception as e:
-            st.error(f"❌ AI_HUB - error: {e}")
+                results = db_text.similarity_search(query, k=5)
 
-    # 9️⃣ Dynamic AI Table Generator (rest of your app behavior)
-    st.subheader("📊 Dynamic Table Generator with AI_HUB")
-    dynamic_query = st.text_input("Type what table you want to extract:")
+            for idx, r in enumerate(results, 1):
+                st.write(f"**Result {idx}:** {r.page_content}")
+        else:
+            st.info("Semantic search unavailable (no embeddings backend detected).")
 
-    if dynamic_query:
-        try:
-            combined_content = "\n".join(text_chunks)
-            if not df_table.empty:
-                combined_content += "\n\n" + df_table.to_csv(index=False)
-            dynamic_prompt = f"""
-            From the PDF content below, form a structured table in markdown as per the user request:
-            USER REQUEST: {dynamic_query}
-            PDF CONTENT: {combined_content[:15000]}
+
+    # =====================================================================
+    # 11. AI_HUB SUMMARY / INSIGHTS / TABLE GENERATION
+    # =====================================================================
+
+    st.header("🤖 AI_HUB Intelligence Tools")
+
+    # -------- SUMMARY ----------
+    if st.button("📘 Generate Summary"):
+        if ai_hub:
+            txt = "\n".join(text_chunks)[:8000]
+            out = ai_hub.generate_content(f"Summarize the following clearly:\n\n{txt}")
+            st.success(out.text)
+        else:
+            st.error("AI_HUB not configured.")
+
+    # -------- INSIGHTS ----------
+    if st.button("🔎 Extract Insights"):
+        if ai_hub:
+            txt = "\n".join(text_chunks)[:8000]
+            prompt = """
+            Analyze this research text and extract:
+            - Key findings
+            - Methods used
+            - Critical parameters
+            - Weaknesses or gaps
+            - Recommendations
             """
-            if ai_hub:
-                ai_response = ai_hub.generate_content(dynamic_prompt)
-                ai_table_md = ai_response.text
-                st.markdown("### 📋 Generated Table by AI_HUB")
-                st.markdown(ai_table_md, unsafe_allow_html=True)
+            out = ai_hub.generate_content(prompt + txt)
+            st.success(out.text)
+        else:
+            st.error("AI_HUB not configured.")
 
-                # SAFELY parse table using read_html
-                dfs = pd.read_html(f"<table>{ai_table_md}</table>") if "<table>" not in ai_table_md else pd.read_html(ai_table_md)
-                df_ai_table = dfs[0]
-                excel_buf4 = io.BytesIO()
-                df_ai_table.to_excel(excel_buf4, index=False, engine="openpyxl")
-                st.download_button("⬇️ Download AI_HUB Generated Table as Excel",
-                                data=excel_buf4.getvalue(),
-                                file_name="ai_hub_generated_table.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            else:
-                st.info("AI_HUB not configured; dynamic table generation requires Gemini.")
-        except Exception as e:
-            st.error(f"❌ AI_HUB dynamic table error: {e}")
+    # -------- CHAT ----------
+    st.subheader("💬 AI_HUB Research Chat")
+    user_q = st.text_input("Ask anything about the PDF")
 
-    # 🔟 Summary
-    if st.button("🧠 Generate AI_HUB Summary of Entire Text"):
-        try:
-            combined_text = "\n".join(text_chunks)
-            summary_prompt = f"Summarize clearly, listing important points:\n\n{combined_text[:8000]}"
-            if ai_hub:
-                response = ai_hub.generate_content(summary_prompt)
-                st.subheader("🧠 AI_HUB - Summary")
-                st.success(response.text)
-            else:
-                st.info("AI_HUB not configured; summary requires Gemini.")
-        except Exception as e:
-            st.error(f"❌ AI_HUB - summary error: {e}")
+    if user_q and ai_hub:
+        full = "\n".join(text_chunks)[:15000]
+        prompt = f"""
+        You are AI_HUB, a research analysis assistant.
+        User question: {user_q}
+        PDF Content:
+        {full}
+        Provide a clear, accurate answer.
+        """
+        out = ai_hub.generate_content(prompt)
+        st.write(out.text)
 
-    # insights
-    if st.button("🤖 Generate AI_HUB Insights"):
-        try:
-            combined_text = "\n".join(text_chunks)
-            insights_prompt = f"""
-            Analyze the following text. Provide:
-            1. Key people or organizations
-            2. Any actionable items or deadlines
-            3. Most critical details
-            4. Recommended next steps
 
-            TEXT:
-            {combined_text[:8000]}
-            """
-            if ai_hub:
-                insights_response = ai_hub.generate_content(insights_prompt)
-                st.subheader("🔎 AI_HUB - Insights")
-                st.success(insights_response.text)
-            else:
-                st.info("AI_HUB not configured; insights require Gemini.")
-        except Exception as e:
-            st.error(f"❌ AI_HUB - insights error: {e}")
-
-    # 1️⃣1️⃣ General Chat with table/chart ability
-    st.subheader("💬 AI_HUB - General Chat with Table/Chart Builder")
-    user_question = st.text_input("Ask anything from the PDF, even chart/table requests:")
-
-    if user_question:
-        try:
-            combined_content = "\n".join(text_chunks)
-            if not df_table.empty:
-                combined_content += "\n\n" + df_table.to_csv(index=False)
-
-            chat_prompt = f"""
-            You are AI_HUB, an intelligent research assistant.
-
-            The user question is: "{user_question}"
-
-            Please answer clearly, and if appropriate, also produce:
-            - a markdown table if it fits
-            - or a chart data description (example: "labels: X, values: Y")
-            based on the following PDF contents:
-
-            {combined_content[:15000]}
-
-            Return any tables in markdown, charts as text data description, and a textual explanation.
-            """
-
-            if ai_hub:
-                chat_response = ai_hub.generate_content(chat_prompt)
-                answer = chat_response.text
-                st.subheader("💬 AI_HUB - Answer")
-                st.markdown(answer, unsafe_allow_html=True)
-
-                # parse possible table
-                table_lines = [line for line in answer.splitlines() if "|" in line]
-                if table_lines:
-                    csv_like = "\n".join(table_lines).replace("|", ",")
-                    import io as _io
-                    df_ai = pd.read_csv(_io.StringIO(csv_like), skipinitialspace=True)
-
-                    st.dataframe(df_ai)
-                    excel_buf5 = io.BytesIO()
-                    df_ai.to_excel(excel_buf5, index=False, engine="openpyxl")
-                    st.download_button(
-                        "⬇️ Download AI_HUB General Chat Table as Excel",
-                        data=excel_buf5.getvalue(),
-                        file_name="ai_hub_general_chat_table.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-
-                # parse chart instructions
-                if "labels:" in answer and "values:" in answer:
-                    labels_match = re.search(r"labels:\s*(.*)", answer)
-                    values_match = re.search(r"values:\s*(.*)", answer)
-                    if labels_match and values_match:
-                        labels = [x.strip() for x in labels_match.group(1).split(",")]
-                        values = [float(x.strip()) for x in values_match.group(1).split(",")]
-                        fig, ax = plt.subplots()
-                        ax.pie(values, labels=labels, autopct="%1.1f%%")
-                        st.pyplot(fig)
-            else:
-                st.info("AI_HUB not configured; chat requires Gemini.")
-        except Exception as e:
-            st.error(f"❌ AI_HUB - chat error: {e}")
-
+    # =====================================================================
     st.markdown("---")
-    st.markdown("🛠 ** Developed by Suraj Kumar Pandey (Founder, AI_HUB Research Platform)**")
+    st.caption("🛠 AI_HUB — Built by Suraj Kumar Pandey")
 
 else:
-    st.info("Please upload a PDF file to get started.")
-# -----------------------------------------------------------------------------
+    st.info("📄 Upload a PDF to begin.")
