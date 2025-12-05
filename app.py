@@ -1,4 +1,4 @@
-# app.py (ready to paste) -----------------------------------------------------
+# app.py (AI_HUB - ready to paste) --------------------------------------------
 import streamlit as st
 import os
 import pdfplumber
@@ -95,20 +95,20 @@ except Exception:
     use_sentence_transformers_fallback = False
     sentence_model = None
 
-# ---------------- GYANM AI config ------------------------------------------------
+# ---------------- AI_HUB (RESEARCH PDF) config --------------------------------
 load_dotenv()
 try:
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))  # uses your .env
-    gyanm_ai = genai.GenerativeModel("gemini-2.5-flash")
+    ai_hub = genai.GenerativeModel("gemini-2.5-flash")
 except Exception as e:
     # if Gemini not configured, we keep a placeholder to avoid crash
-    gyanm_ai = None
-    st.warning("Warning: Google Generative AI not configured or failed to initialize. Gemini features will be disabled.")
+    ai_hub = None
+    st.warning("Warning: Google Generative AI not configured or failed to initialize. AI_HUB features will be disabled.")
 
 # ---------------- Streamlit page ------------------------------------------------
-st.set_page_config(page_title="AI PDF to Excel & Summarizing by Suraj", layout="wide")
-st.title("🤖 ARTIFICIAL INTELLIGENCE PDF TO EXCEL, SMART SEARCH & INSIGHTS")
-st.caption("🛠 Developed with ❤️ by **Suraj Kumar Pandey (Founder, Gyanm AI Platform)**")
+st.set_page_config(page_title="AI_HUB — Research PDF to Excel & Insights", layout="wide")
+st.title("🤖 AI_HUB — Research PDF to Excel, Smart Search & Insights")
+st.caption("🛠 Developed with ❤️ by **Suraj Kumar Pandey (Founder, AI_HUB Research Platform)**")
 
 uploaded_file = st.file_uploader("📄 Upload your PDF file", type="pdf")
 
@@ -352,7 +352,7 @@ if uploaded_file:
             else:
                 st.info("No semantic table matches found.")
 
-        # explanation using GYANM-AI (if configured)
+        # explanation using AI_HUB (if configured)
         table_context = "\n".join(doc.page_content for doc in semantic_table_matches) if semantic_table_matches else ""
         prompt = (
             f"Given this extracted data:\n\n{table_context}\n\n"
@@ -360,16 +360,16 @@ if uploaded_file:
             f"Provide a detailed answer with insights."
         )
         try:
-            if gyanm_ai:
-                gyanm_response = gyanm_ai.generate_content(prompt)
-                st.markdown(f"### 🧠 GYANM - AI Explanation\n{gyanm_response.text}")
+            if ai_hub:
+                ai_response = ai_hub.generate_content(prompt)
+                st.markdown(f"### 🧠 AI_HUB - Explanation\n{ai_response.text}")
             else:
-                st.info("GYANM-AI not configured; can't produce AI explanation.")
+                st.info("AI_HUB not configured; can't produce AI explanation.")
         except Exception as e:
-            st.error(f"❌ GYANM - AI error: {e}")
+            st.error(f"❌ AI_HUB - error: {e}")
 
     # 9️⃣ Dynamic AI Table Generator (rest of your app behavior)
-    st.subheader("📊 Dynamic Table Generator with GYANM - AI")
+    st.subheader("📊 Dynamic Table Generator with AI_HUB")
     dynamic_query = st.text_input("Type what table you want to extract:")
 
     if dynamic_query:
@@ -382,42 +382,42 @@ if uploaded_file:
             USER REQUEST: {dynamic_query}
             PDF CONTENT: {combined_content[:15000]}
             """
-            if gyanm_ai:
-                gyanm_ai_response = gyanm_ai.generate_content(dynamic_prompt)
-                gyanm_table_md = gyanm_ai_response.text
-                st.markdown("### 📋 Generated Table by GYANM - AI")
-                st.markdown(gyanm_table_md, unsafe_allow_html=True)
+            if ai_hub:
+                ai_response = ai_hub.generate_content(dynamic_prompt)
+                ai_table_md = ai_response.text
+                st.markdown("### 📋 Generated Table by AI_HUB")
+                st.markdown(ai_table_md, unsafe_allow_html=True)
 
                 # SAFELY parse table using read_html
-                dfs = pd.read_html(f"<table>{gyanm_table_md}</table>") if "<table>" not in gyanm_table_md else pd.read_html(gyanm_table_md)
-                df_gyanm = dfs[0]
+                dfs = pd.read_html(f"<table>{ai_table_md}</table>") if "<table>" not in ai_table_md else pd.read_html(ai_table_md)
+                df_ai_table = dfs[0]
                 excel_buf4 = io.BytesIO()
-                df_gyanm.to_excel(excel_buf4, index=False, engine="openpyxl")
-                st.download_button("⬇️ Download GYANM-AI Generated Table as Excel",
+                df_ai_table.to_excel(excel_buf4, index=False, engine="openpyxl")
+                st.download_button("⬇️ Download AI_HUB Generated Table as Excel",
                                 data=excel_buf4.getvalue(),
-                                file_name="gyanm_ai_generated_table.xlsx",
+                                file_name="ai_hub_generated_table.xlsx",
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
             else:
-                st.info("GYANM-AI not configured; dynamic table generation requires Gemini.")
+                st.info("AI_HUB not configured; dynamic table generation requires Gemini.")
         except Exception as e:
-            st.error(f"❌ GYANM - AI dynamic table error: {e}")
+            st.error(f"❌ AI_HUB dynamic table error: {e}")
 
     # 🔟 Summary
-    if st.button("🧠 Generate AI Summary of Entire Text"):
+    if st.button("🧠 Generate AI_HUB Summary of Entire Text"):
         try:
             combined_text = "\n".join(text_chunks)
             summary_prompt = f"Summarize clearly, listing important points:\n\n{combined_text[:8000]}"
-            if gyanm_ai:
-                response = gyanm_ai.generate_content(summary_prompt)
-                st.subheader("🧠 GYANM - AI Summary")
+            if ai_hub:
+                response = ai_hub.generate_content(summary_prompt)
+                st.subheader("🧠 AI_HUB - Summary")
                 st.success(response.text)
             else:
-                st.info("GYANM-AI not configured; summary requires Gemini.")
+                st.info("AI_HUB not configured; summary requires Gemini.")
         except Exception as e:
-            st.error(f"❌ GYANM - AI summary error: {e}")
+            st.error(f"❌ AI_HUB - summary error: {e}")
 
     # insights
-    if st.button("🤖 Generate AI Insights"):
+    if st.button("🤖 Generate AI_HUB Insights"):
         try:
             combined_text = "\n".join(text_chunks)
             insights_prompt = f"""
@@ -430,17 +430,17 @@ if uploaded_file:
             TEXT:
             {combined_text[:8000]}
             """
-            if gyanm_ai:
-                insights_response = gyanm_ai.generate_content(insights_prompt)
-                st.subheader("🔎 GYANM - AI Insights")
+            if ai_hub:
+                insights_response = ai_hub.generate_content(insights_prompt)
+                st.subheader("🔎 AI_HUB - Insights")
                 st.success(insights_response.text)
             else:
-                st.info("GYANM-AI not configured; insights require Gemini.")
+                st.info("AI_HUB not configured; insights require Gemini.")
         except Exception as e:
-            st.error(f"❌ GYANM - AI insights error: {e}")
+            st.error(f"❌ AI_HUB - insights error: {e}")
 
     # 1️⃣1️⃣ General Chat with table/chart ability
-    st.subheader("💬 GYANM - AI General Chat with Table/Chart Builder")
+    st.subheader("💬 AI_HUB - General Chat with Table/Chart Builder")
     user_question = st.text_input("Ask anything from the PDF, even chart/table requests:")
 
     if user_question:
@@ -450,7 +450,7 @@ if uploaded_file:
                 combined_content += "\n\n" + df_table.to_csv(index=False)
 
             chat_prompt = f"""
-            You are GYANM-AI, an intelligent assistant.
+            You are AI_HUB, an intelligent research assistant.
 
             The user question is: "{user_question}"
 
@@ -464,10 +464,10 @@ if uploaded_file:
             Return any tables in markdown, charts as text data description, and a textual explanation.
             """
 
-            if gyanm_ai:
-                chat_response = gyanm_ai.generate_content(chat_prompt)
+            if ai_hub:
+                chat_response = ai_hub.generate_content(chat_prompt)
                 answer = chat_response.text
-                st.subheader("💬 GYANM - AI Answer")
+                st.subheader("💬 AI_HUB - Answer")
                 st.markdown(answer, unsafe_allow_html=True)
 
                 # parse possible table
@@ -481,9 +481,9 @@ if uploaded_file:
                     excel_buf5 = io.BytesIO()
                     df_ai.to_excel(excel_buf5, index=False, engine="openpyxl")
                     st.download_button(
-                        "⬇️ Download GYANM-AI General Chat Table as Excel",
+                        "⬇️ Download AI_HUB General Chat Table as Excel",
                         data=excel_buf5.getvalue(),
-                        file_name="gyanm_ai_general_chat_table.xlsx",
+                        file_name="ai_hub_general_chat_table.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
 
@@ -498,12 +498,12 @@ if uploaded_file:
                         ax.pie(values, labels=labels, autopct="%1.1f%%")
                         st.pyplot(fig)
             else:
-                st.info("GYANM-AI not configured; chat requires Gemini.")
+                st.info("AI_HUB not configured; chat requires Gemini.")
         except Exception as e:
-            st.error(f"❌ GYANM - AI chat error: {e}")
+            st.error(f"❌ AI_HUB - chat error: {e}")
 
     st.markdown("---")
-    st.markdown("🛠 ** Developed by Suraj Kumar Pandey (Founder, Gyanm AI Platform)**")
+    st.markdown("🛠 ** Developed by Suraj Kumar Pandey (Founder, AI_HUB Research Platform)**")
 
 else:
     st.info("Please upload a PDF file to get started.")
