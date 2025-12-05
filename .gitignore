@@ -1,0 +1,6 @@
+
+# ignore env & secrets
+.env
+.streamlit/secrets.toml
+.env.local
+.devcontainer/devcontainer.json
