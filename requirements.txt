@@ -1,19 +1,16 @@
-streamlit==1.27.0
-pdfplumber==0.8.0
-pandas==2.2.2
-openpyxl==3.1.2
-matplotlib==3.7.2
-python-dotenv==1.0.0
-
+streamlit==1.38.0  # Updated for better stability
+pdfplumber==0.11.4  # Latest for better PDF handling
+pandas==2.2.3  # Minor bump for compatibility
+openpyxl==3.1.5  # Minor bump
+matplotlib==3.9.2  # Updated for plotting
+python-dotenv==1.0.1  # Minor
 # Google Gemini API
-google-generative-ai==0.1.0
-
-# LangChain components (matching the import paths used)
-langchain==0.0.297
-langchain-community==0.0.21
-
-# Embeddings (fallback vector store + HuggingFace)
-sentence-transformers==2.2.2
-
-# FAISS — optional; Streamlit Cloud MAY FAIL — but safe with fallback in app.py
-faiss-cpu==1.7.4
+google-generativeai==0.8.3  # Updated (your old 0.1.0 is ancient)
+# LangChain (core + split packages for modularity)
+langchain==0.3.1
+langchain-community==0.3.1
+langchain-text-splitters==0.3.1  # NEW: This fixes the CharacterTextSplitter import
+# Embeddings
+sentence-transformers==3.1.1  # Updated
+# FAISS (works fine, but ensure CPU version for Streamlit Cloud)
+faiss-cpu==1.8.0  # Minor update
