@@ -1,12 +1,11 @@
-streamlit
-pdfplumber
-pandas
-openpyxl
-google-generativeai
+streamlit==1.27.0
+pdfplumber==0.8.0
+pandas==2.2.2
+openpyxl==3.1.2
+matplotlib==3.7.2
+python-dotenv==1.0.0
+google-generative-ai==0.1.0
+sentence-transformers==2.2.2
+# Optional offline: langchain and community packages are not required for basic app functionality on Streamlit Cloud
 langchain==0.2.3
 langchain-community==0.2.3
-sentence-transformers
-python-dotenv
-faiss-cpu
-matplotlib
-
