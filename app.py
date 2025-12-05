@@ -6,9 +6,9 @@ import tempfile
 import io
 from dotenv import load_dotenv
 import google.generativeai as genai
-from langchain_text_splitters import CharacterTextSplitter  # FIXED: New package/import
+from langchain_text_splitters import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings  # FIXED: New import for compatibility
 import matplotlib.pyplot as plt
 import re
 
@@ -123,25 +123,34 @@ if uploaded_file:
     
     # 7️⃣ Build semantic index
     st.info("🔗 Building semantic index for smart text search...")
-    text_splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=100)
-    split_docs = text_splitter.create_documents(text_chunks)
-  
-    embed_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-  
-    if split_docs:  # safe check
-        db_text = FAISS.from_documents(split_docs, embed_model)
-    else:
+    try:
+        text_splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=100)
+        split_docs = text_splitter.create_documents(text_chunks)
+      
+        embed_model = HuggingFaceEmbeddings(
+            model_name="all-MiniLM-L6-v2",
+            model_kwargs={'device': 'cpu'},  # FIXED: Force CPU to avoid meta tensor errors
+            encode_kwargs={'device': 'cpu'}  # FIXED: Same for encoding
+        )
+      
+        if split_docs:  # safe check
+            db_text = FAISS.from_documents(split_docs, embed_model)
+        else:
+            db_text = None
+            st.warning("⚠️ No text available to build semantic index.")
+        
+        if not df_table.empty:
+            table_text_rows = [
+                " | ".join(str(v) for v in row)
+                for row in df_table.values.tolist()
+            ]
+            table_docs = text_splitter.create_documents(table_text_rows)
+            db_table = FAISS.from_documents(table_docs, embed_model)
+        else:
+            db_table = None
+    except Exception as e:
+        st.error(f"⚠️ Semantic index build failed: {e}. Using basic search fallback.")
         db_text = None
-        st.warning("⚠️ No text available to build semantic index.")
-    
-    if not df_table.empty:
-        table_text_rows = [
-            " | ".join(str(v) for v in row)
-            for row in df_table.values.tolist()
-        ]
-        table_docs = text_splitter.create_documents(table_text_rows)
-        db_table = FAISS.from_documents(table_docs, embed_model)
-    else:
         db_table = None
     
     # 8️⃣ Unified Smart Search
