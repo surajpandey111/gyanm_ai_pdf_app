@@ -15,7 +15,7 @@ import re
 # 1️⃣ AI HUB config
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))  # uses your .env
-ai_hub = genai.GenerativeModel("gemini-1.5-flash")  # FIXED: Correct model name
+ai_hub = genai.GenerativeModel("gemini-2.5-flash")  # FIXED: Correct model name
 
 # 2️⃣ Streamlit page
 st.set_page_config(page_title="AI PDF to Excel & Summarizing by Suraj", layout="wide")
@@ -335,3 +335,4 @@ if uploaded_file:
     st.markdown("🛠 ** Developed by Suraj Kumar Pandey (Founder, AI Hub Platform)**")
 else:
     st.info("Please upload a PDF file to get started.")
+
