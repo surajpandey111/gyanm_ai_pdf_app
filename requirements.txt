@@ -3,9 +3,10 @@ pdfplumber
 pandas
 openpyxl
 google-generativeai
-langchain
-langchain-community
+langchain==0.2.3
+langchain-community==0.2.3
 sentence-transformers
 python-dotenv
 faiss-cpu
 matplotlib
+
